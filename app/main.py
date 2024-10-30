@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.auth.router import router as router_users
 
 logging.basicConfig(
         level=logging.DEBUG,
@@ -24,6 +25,7 @@ main_app = FastAPI(
     openapi_prefix="/api",
     lifespan=lifespan,
     )
+main_app.include_router(router_users)
 
 origins = settings.ORIGINS
 
