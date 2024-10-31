@@ -1,11 +1,24 @@
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Response, status
 
 from app.auth.schemas import SUserAuth
 from app.auth.dao import UsersDAO
-from app.exceptions import UserAlreadyExistException, UserNotAddedException
-from app.auth.auth import get_password_hash
+
+from app.exceptions import (
+    UserAlreadyExistException,
+    UserNotAddedException
+)
+
+from app.auth.auth import (
+    get_password_hash,
+    validate_auth_user,
+)
+
+from app.auth.jwt_utils import (
+    create_access_token,
+    create_refresh_token
+)
 
 router = APIRouter(
     prefix="/auth",
@@ -13,7 +26,7 @@ router = APIRouter(
 )
 
 
-@router.post("/register")
+@router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: SUserAuth):
     existing_user = await UsersDAO.find_one_or_none(username=user_data.username)
     if existing_user:
@@ -30,3 +43,13 @@ async def register_user(user_data: SUserAuth):
         logging.info(f"{err}")
         raise UserNotAddedException
     return {"message": "Клиент успешно зарегистрирован"}
+
+
+@router.post("/login")
+async def login_user(response: Response, user: SUserAuth = Depends(validate_auth_user)):
+    access_token = create_access_token(user)
+    refresh_token = create_refresh_token(user)
+
+    response.set_cookie("access_token", access_token, samesite="lax", httponly=True)
+    response.set_cookie("refresh_token", refresh_token, samesite="lax", httponly=True)
+    return {"access_token": access_token, "refresh_token": refresh_token}

@@ -7,5 +7,10 @@ UserAlreadyExistException = HTTPException(
 
 UserNotAddedException = HTTPException(
     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-    detail="Не удалось зарегистрировать пользователя",
+    detail="Не удалось зарегистрировать пользователя.",
+)
+
+IncorrectUserOrPasswordException = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Неверное имя пользователя или пароль.",
 )
