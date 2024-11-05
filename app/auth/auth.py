@@ -1,32 +1,20 @@
-import base64
 import logging
-from typing import List
-from pydantic import BaseModel
-from fastapi_jwt_auth import AuthJWT
+from pytz import timezone
+from fastapi import Request
+from jose import jwt, JWTError
 from cryptography.fernet import Fernet
+from datetime import datetime, timedelta
 
 from app.config import settings
 from app.auth.dao import UsersDAO
-from app.exceptions import IncorrectUserOrPasswordException
 
-
-class Settings(BaseModel):
-    authjwt_algorithm: str = settings.JWT_ALGORITHM
-    authjwt_decode_algorithms: List[str] = [settings.JWT_ALGORITHM]
-    authjwt_token_location: set = {'cookies', 'headers'}
-    authjwt_access_cookie_key: str = 'access_token'
-    authjwt_refresh_cookie_key: str = 'refresh_token'
-    authjwt_cookie_csrf_protect: bool = False
-    authjwt_public_key: str = base64.b64decode(
-        settings.JWT_PUBLIC_KEY).decode('utf-8')
-    authjwt_private_key: str = base64.b64decode(
-        settings.JWT_PRIVATE_KEY).decode('utf-8')
-
-
-@AuthJWT.load_config
-def get_config():
-    return Settings()
-
+from app.exceptions import (
+    IncorrectUserOrPasswordException,
+    TokenNotFoundException,
+    IncorrectTokenFormatException,
+    UserNotExistException,
+    TokenExpiredException,
+)
 
 CIFER_SUITE = Fernet(settings.ENCRYPTION_KEY)
 
@@ -57,4 +45,51 @@ async def validate_auth_user(username: str, password: str):
         raise IncorrectUserOrPasswordException
     if not verify_password(password, user.password_hash):
         raise IncorrectUserOrPasswordException
+    return user
+
+
+def create_token(data: dict, expire: float) -> str:
+    to_encode = data.copy()
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(
+        to_encode, settings.JWT_SECRET_KEY, settings.JWT_ALGORITHM
+    )
+    return encoded_jwt
+
+
+def create_access_token(data: dict):
+    current_time = datetime.now(timezone(settings.SERVER_TIMEZONE))
+    expire = current_time + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    return create_token(data, expire.timestamp())
+
+
+def create_refresh_token(data: dict):
+    current_time = datetime.now(timezone(settings.SERVER_TIMEZONE))
+    expire = current_time + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    return create_token(data, expire.timestamp())
+
+
+async def require_user(request: Request):
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise TokenNotFoundException
+
+    try:
+        payload = jwt.decode(refresh_token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+    except JWTError:
+        raise IncorrectTokenFormatException
+
+    expire: str = payload.get("exp")
+    current_time = datetime.now(timezone(settings.SERVER_TIMEZONE))
+    if (not expire) or (float(expire) < current_time.timestamp()):
+        raise TokenExpiredException
+
+    username: str = payload.get("sub")
+    if not username:
+        raise IncorrectTokenFormatException
+
+    user = await UsersDAO.find_one_or_none(username=username)
+    if not user:
+        raise UserNotExistException
+
     return user

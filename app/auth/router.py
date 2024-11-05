@@ -1,20 +1,20 @@
 import logging
-from datetime import timedelta
-from fastapi_jwt_auth import AuthJWT
 from fastapi import APIRouter, Depends, Response, status
 
 from app.auth.schemas import SUserAuth
 from app.auth.dao import UsersDAO
-from app.config import settings
 
 from app.exceptions import (
     UserAlreadyExistException,
-    UserNotAddedException
+    UserNotAddedException,
 )
 
 from app.auth.auth import (
     get_password_hash,
     validate_auth_user,
+    create_access_token,
+    create_refresh_token,
+    require_user,
 )
 
 router = APIRouter(
@@ -45,16 +45,26 @@ async def register_user(user_data: SUserAuth):
 @router.post("/login")
 async def login_user(
         response: Response,
-        user: SUserAuth = Depends(validate_auth_user),
-        authorise: AuthJWT = Depends()
+        user: SUserAuth = Depends(validate_auth_user)
 ):
-    access_token = authorise.create_access_token(
-        subject=user.username, expires_time=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    refresh_token = authorise.create_refresh_token(
-        subject=user.username, expires_time=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    )
-
+    access_token = create_access_token({"sub": user.username})
+    refresh_token = create_refresh_token({"sub": user.username})
     response.set_cookie("access_token", access_token, samesite="lax", httponly=True)
-    response.set_cookie("refresh_token", refresh_token, samesite="lax", httponly=True)
+    response.set_cookie("refresh_token", access_token, samesite="lax", httponly=True)
     return {"access_token": access_token, "refresh_token": refresh_token}
+
+
+@router.post("/refresh")
+async def refresh_access_token(
+        response: Response,
+        user: SUserAuth = Depends(require_user)
+):
+    access_token = create_access_token({"sub": user.username})
+    response.set_cookie("access_token", access_token, samesite="lax", httponly=True)
+    return {'access_token': access_token}
+
+
+@router.post("logout")
+async def loguot(response: Response):
+    response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
