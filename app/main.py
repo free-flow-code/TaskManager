@@ -27,11 +27,9 @@ main_app = FastAPI(
     )
 main_app.include_router(router_users)
 
-origins = settings.ORIGINS
-
 main_app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=[

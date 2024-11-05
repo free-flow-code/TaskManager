@@ -1,9 +1,11 @@
 import logging
-
+from datetime import timedelta
+from fastapi_jwt_auth import AuthJWT
 from fastapi import APIRouter, Depends, Response, status
 
 from app.auth.schemas import SUserAuth
 from app.auth.dao import UsersDAO
+from app.config import settings
 
 from app.exceptions import (
     UserAlreadyExistException,
@@ -13,11 +15,6 @@ from app.exceptions import (
 from app.auth.auth import (
     get_password_hash,
     validate_auth_user,
-)
-
-from app.auth.jwt_utils import (
-    create_access_token,
-    create_refresh_token
 )
 
 router = APIRouter(
@@ -40,15 +37,23 @@ async def register_user(user_data: SUserAuth):
     try:
         await UsersDAO.add(**new_user_data)
     except Exception as err:
-        logging.info(f"{err}")
+        logging.error(f"{err}")
         raise UserNotAddedException
     return {"message": "Клиент успешно зарегистрирован"}
 
 
 @router.post("/login")
-async def login_user(response: Response, user: SUserAuth = Depends(validate_auth_user)):
-    access_token = create_access_token(user)
-    refresh_token = create_refresh_token(user)
+async def login_user(
+        response: Response,
+        user: SUserAuth = Depends(validate_auth_user),
+        authorise: AuthJWT = Depends()
+):
+    access_token = authorise.create_access_token(
+        subject=user.username, expires_time=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    refresh_token = authorise.create_refresh_token(
+        subject=user.username, expires_time=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    )
 
     response.set_cookie("access_token", access_token, samesite="lax", httponly=True)
     response.set_cookie("refresh_token", refresh_token, samesite="lax", httponly=True)

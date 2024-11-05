@@ -27,10 +27,12 @@ class Settings(BaseSettings):
         return values
 
     JWT_SECRET_KEY: str
-    ALGORITHM: str = "HS256"
+    JWT_ALGORITHM: str = "HS256"
     ENCRYPTION_KEY: str
-    JWT_TOKEN_DELAY_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    JWT_PRIVATE_KEY: str = None
+    JWT_PUBLIC_KEY: str = None
     ORIGINS: list = ["localhost:8000", "127.0.0.1:8000"]
 
 

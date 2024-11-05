@@ -1,21 +1,43 @@
+import base64
 import logging
+from typing import List
+from pydantic import BaseModel
+from fastapi_jwt_auth import AuthJWT
 from cryptography.fernet import Fernet
 
 from app.config import settings
 from app.auth.dao import UsersDAO
 from app.exceptions import IncorrectUserOrPasswordException
 
-key = settings.ENCRYPTION_KEY
-cipher_suite = Fernet(key)
+
+class Settings(BaseModel):
+    authjwt_algorithm: str = settings.JWT_ALGORITHM
+    authjwt_decode_algorithms: List[str] = [settings.JWT_ALGORITHM]
+    authjwt_token_location: set = {'cookies', 'headers'}
+    authjwt_access_cookie_key: str = 'access_token'
+    authjwt_refresh_cookie_key: str = 'refresh_token'
+    authjwt_cookie_csrf_protect: bool = False
+    authjwt_public_key: str = base64.b64decode(
+        settings.JWT_PUBLIC_KEY).decode('utf-8')
+    authjwt_private_key: str = base64.b64decode(
+        settings.JWT_PRIVATE_KEY).decode('utf-8')
+
+
+@AuthJWT.load_config
+def get_config():
+    return Settings()
+
+
+CIFER_SUITE = Fernet(settings.ENCRYPTION_KEY)
 
 
 def get_password_hash(password: str) -> str:
-    encrypted_password = cipher_suite.encrypt(password.encode())
+    encrypted_password = CIFER_SUITE.encrypt(password.encode())
     return encrypted_password.decode()
 
 
 def get_password_from_hash(encrypted_password: str) -> str:
-    decrypted_password = cipher_suite.decrypt(encrypted_password.encode())
+    decrypted_password = CIFER_SUITE.decrypt(encrypted_password.encode())
     return decrypted_password.decode()
 
 
